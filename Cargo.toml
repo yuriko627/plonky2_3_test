@@ -1,5 +1,5 @@
 [package]
-name = "plonky3_fibonacci"
+name = "plonky3_polyop"
 version = "0.1.0"
 edition = "2021"
 

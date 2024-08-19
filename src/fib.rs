@@ -21,77 +21,65 @@ use tracing_forest::ForestLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
-use rand::{thread_rng, Rng};
+
+// Used for reference. From https://github.com/BrianSeong99/plonky3_fibonacci.
 
 // Define your AIR constraint inputs via declaring a Struct with relevent inputs in it
-pub struct PolyAddAir {
-	pub poly1: Vec<u32>,
-	pub poly2: Vec<u32>,
-	pub added_poly: Vec<u32>
+pub struct FibonacciAir {
+    pub num_steps: usize,
+    pub final_value: u32,
 }
 
 // Define your Execution Trace Row size
 // Air constraint is about working with the execution trace, where you can imagine a 2D matrix
 // Each row represents the current iteration of the computation, and the colums for each row has elements that are associated with the computation
-impl<F: Field> BaseAir<F> for PolyAddAir {
+impl<F: Field> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
-        7000 // adding 2 ciphertexts polynomials with 3500 terms
+        2 // For current and next Fibonacci number
     }
 }
 
 // Define your constraints
-impl<AB: AirBuilder> Air<AB> for PolyAddAir {
+impl<AB: AirBuilder> Air<AB> for FibonacciAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let current = main.row_slice(0);
         let next = main.row_slice(1);
 
-        // Enforce input polynomial values
-		for i in 0..3500 {
-			builder.when_first_row().assert_eq(current[i], AB::Expr::from_canonical_u32(self.poly1[i]));
-			builder.when_first_row().assert_eq(current[i+3500], AB::Expr::from_canonical_u32(self.poly2[i]));
-		}
+        // Enforce starting values
+        builder.when_first_row().assert_eq(current[0], AB::Expr::zero());
+        builder.when_first_row().assert_eq(current[1], AB::Expr::one());
 
         // Enforce state transition constraints
-		for i in 0..3500 {
-			builder.when_transition().assert_eq(next[i], current[i] + current[i+3500]);
-		}
+        builder.when_transition().assert_eq(next[0], current[1]);
+        builder.when_transition().assert_eq(next[1], current[0] + current[1]);
 
         // Constrain the final value
-		for i in 0..3500 {
-			let final_value = AB::Expr::from_canonical_u32(self.added_poly[i]);
-			builder.when_last_row().assert_eq(current[i], final_value);
-		}
+        let final_value = AB::Expr::from_canonical_u32(self.final_value);
+        builder.when_last_row().assert_eq(current[1], final_value);
     }
 }
 
 // Define a function to generate your program's execution trace
-// This function keeps track of all the relevent state for each iteration, push them all into a 1D vector,
-// and convert this 1D vector into a matrix in the dimension that matches your AIR script's width
-pub fn generate_polyadd_trace<F: Field>(poly1:Vec<u32>, poly2:Vec<u32>) -> RowMajorMatrix<F> {
-    // Declaring the total slots needed to keep track of the execution with the given parameter, which in this case, is num_steps multiply by 7000, where 7000 is the width of the AIR scripts.
-    let mut values: Vec<F>= Vec::with_capacity(2 * 7000);
+// This function keeps track of all the relevent state for each iteration, push them all into a vector, and convert this 1D vector into 
+// a matrix in the dimension that matches your AIR script's width
+pub fn generate_fibonacci_trace<F: Field>(num_steps: usize) -> RowMajorMatrix<F> {
+    // Declaring the total fields needed to keep track of the execution with the given parameter, which in this case, is num_steps multiply by 2, where 2 is the width of the AIR scripts.
+    let mut values = Vec::with_capacity(num_steps * 2);
 
-	// fill in the states in each iteration in the `values` vector
-	for i in 0..3500 {
-		values.push(F::from_canonical_u32(poly1[i]));
-	}
-	for i in 0..3500 {
-		values.push(F::from_canonical_u32(poly2[i]));
-	}
+    // Define your initial state, 0 and 1.
+    let mut a = F::zero();
+    let mut b = F::one();
 
-	// Add the 2 polynomials and push it to values vector
-	for i in 0..3500 {
-		values.push(F::from_canonical_u32(poly1[i] + poly2[i]));
-	}
-
-	// Fill in the rest of the values with 0
-	for _ in 0..3500 {
-		values.push(F::zero());
-	}
-	println!("{}", values.len());
-    RowMajorMatrix::new(values, 7000)
-
+    // Run your program and fill in the states in each iteration in the `values` vector
+    for _ in 0..num_steps {
+        values.push(a);
+        values.push(b);
+        let c = a + b;
+        a = b;
+        b = c;
+    }
+    RowMajorMatrix::new(values, 2)
 }
 
 fn main() -> Result<(), impl Debug> {
@@ -103,8 +91,9 @@ fn main() -> Result<(), impl Debug> {
         .with(env_filter)
         .with(ForestLayer::default())
         .init();
-
+    
     // Define zk system configuration
+    // your choice of field
     type Val = Mersenne31;
     type Challenge = BinomialExtensionField<Val, 3>;
 
@@ -141,36 +130,10 @@ fn main() -> Result<(), impl Debug> {
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
     let config = MyConfig::new(pcs);
 
-	// Generate 2 random polynomials with 3500 terms each
-	// let random_poly1: Vec<F> = (0..3500).map(|_| {
-	// 	let random_u32 = rng.gen_range(0..F::ORDER_U32); // Generate a random u32
-	// 	F::from_canonical_u32(random_u32)  // Convert it to type F
-	// }).collect();
-
-	// let random_poly2: Vec<F> = (0..3500).map(|_| {
-	// 	let random_u32 = rng.gen_range(0..F::ORDER_U32); // Generate a random u32
-	// 	F::from_canonical_u32(random_u32)  // Convert it to type F
-	// }).collect();
-
-	let mut rng = thread_rng();
-	let random_poly1: Vec<u32> = (0..3500).map(|_| {
-		rng.gen_range(0..3000)
-	}).collect();
-
-	let random_poly2: Vec<u32> = (0..3500).map(|_| {
-		rng.gen_range(0..3000)
-	}).collect();
-
-	let mut added_poly: Vec<u32> = Vec::with_capacity(3500);
-
-	// Add the 2 polynomials
-	for i in 0..3500 {
-		added_poly.push(random_poly1[i] + random_poly2[i]);
-	}
-
-    let air = PolyAddAir { poly1: random_poly1.clone(), poly2: random_poly2.clone(), added_poly };
-
-    let trace = generate_polyadd_trace::<Val>(random_poly1, random_poly2);
+    let num_steps = 8; // Choose the number of Fibonacci steps
+    let final_value = 21; // Choose the final Fibonacci value
+    let air = FibonacciAir { num_steps, final_value };
+    let trace = generate_fibonacci_trace::<Val>(num_steps);
 
     let mut challenger: SerializingChallenger32<Mersenne31, HashChallenger<u8, Keccak256Hash, 32>> = Challenger::from_hasher(vec![], byte_hash);
     let proof = prove(&config, &air, &mut challenger, trace, &vec![]);
