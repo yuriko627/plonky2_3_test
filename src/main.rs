@@ -35,7 +35,7 @@ pub struct PolyAddAir {
 // Each row represents the current iteration of the computation, and the colums for each row has elements that are associated with the computation
 impl<F: Field> BaseAir<F> for PolyAddAir {
     fn width(&self) -> usize {
-        7000 // adding 2 ciphertexts polynomials with 3500 terms
+        10500 // poly1, pol2, added_poly's coeffs in total
     }
 }
 
@@ -44,24 +44,15 @@ impl<AB: AirBuilder> Air<AB> for PolyAddAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let current = main.row_slice(0);
-        let next = main.row_slice(1);
+        // let next = main.row_slice(1);
 
-        // Enforce input polynomial values
+        // Enforce input polynomial values and the added polynomial values
 		for i in 0..3500 {
 			builder.when_first_row().assert_eq(current[i], AB::Expr::from_canonical_u32(self.poly1[i]));
 			builder.when_first_row().assert_eq(current[i+3500], AB::Expr::from_canonical_u32(self.poly2[i]));
+            builder.when_first_row().assert_eq(current[i+7000], AB::Expr::from_canonical_u32(self.added_poly[i]));
 		}
 
-        // Enforce state transition constraints
-		for i in 0..3500 {
-			builder.when_transition().assert_eq(next[i], current[i] + current[i+3500]);
-		}
-
-        // Constrain the final value
-		for i in 0..3500 {
-			let final_value = AB::Expr::from_canonical_u32(self.added_poly[i]);
-			builder.when_last_row().assert_eq(current[i], final_value);
-		}
     }
 }
 
@@ -70,7 +61,7 @@ impl<AB: AirBuilder> Air<AB> for PolyAddAir {
 // and convert this 1D vector into a matrix in the dimension that matches your AIR script's width
 pub fn generate_polyadd_trace<F: Field>(poly1:Vec<u32>, poly2:Vec<u32>) -> RowMajorMatrix<F> {
     // Declaring the total slots needed to keep track of the execution with the given parameter, which in this case, is num_steps multiply by 7000, where 7000 is the width of the AIR scripts.
-    let mut values: Vec<F>= Vec::with_capacity(2 * 7000);
+    let mut values: Vec<F>= Vec::with_capacity(4 * 10500); // 4 is the minimum number of rows required
 
 	// fill in the states in each iteration in the `values` vector
 	for i in 0..3500 {
@@ -82,15 +73,14 @@ pub fn generate_polyadd_trace<F: Field>(poly1:Vec<u32>, poly2:Vec<u32>) -> RowMa
 
 	// Add the 2 polynomials and push it to values vector
 	for i in 0..3500 {
-		values.push(F::from_canonical_u32(poly1[i] + poly2[i]));
+		values.push(F::from_canonical_u32((poly1[i] + poly2[i]) % 536870939));
 	}
 
-	// Fill in the rest of the values with 0
-	for _ in 0..3500 {
+	// Fill in the rest of the slots (last 3 rows) with 0
+	for _ in 0..(3 * 10500) {
 		values.push(F::zero());
 	}
-	println!("{}", values.len());
-    RowMajorMatrix::new(values, 7000)
+    RowMajorMatrix::new(values, 10500)
 
 }
 
@@ -141,31 +131,20 @@ fn main() -> Result<(), impl Debug> {
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
     let config = MyConfig::new(pcs);
 
-	// Generate 2 random polynomials with 3500 terms each
-	// let random_poly1: Vec<F> = (0..3500).map(|_| {
-	// 	let random_u32 = rng.gen_range(0..F::ORDER_U32); // Generate a random u32
-	// 	F::from_canonical_u32(random_u32)  // Convert it to type F
-	// }).collect();
-
-	// let random_poly2: Vec<F> = (0..3500).map(|_| {
-	// 	let random_u32 = rng.gen_range(0..F::ORDER_U32); // Generate a random u32
-	// 	F::from_canonical_u32(random_u32)  // Convert it to type F
-	// }).collect();
-
 	let mut rng = thread_rng();
 	let random_poly1: Vec<u32> = (0..3500).map(|_| {
-		rng.gen_range(0..3000)
+		rng.gen_range(0..536870939) // chose an arbitrary 30-bits prime number
 	}).collect();
 
 	let random_poly2: Vec<u32> = (0..3500).map(|_| {
-		rng.gen_range(0..3000)
+		rng.gen_range(0..536870939)
 	}).collect();
 
 	let mut added_poly: Vec<u32> = Vec::with_capacity(3500);
 
 	// Add the 2 polynomials
 	for i in 0..3500 {
-		added_poly.push(random_poly1[i] + random_poly2[i]);
+		added_poly.push((random_poly1[i] + random_poly2[i]) % 536870939);
 	}
 
     let air = PolyAddAir { poly1: random_poly1.clone(), poly2: random_poly2.clone(), added_poly };
