@@ -21,4 +21,5 @@ You can run `cargo run --bin [filename]` to see the performance of prover time a
 | plonky2 (64-bits prime field) | 7.28s | 237.39ms |
 | plonky3 (31-bits prime field) | 937ms | 3.63s |
 
-- measured on my M1 Macbook Pro with 8 cores and 16GB memory
+- measured on M1 Macbook Pro with 8 cores and 16GB memory
+- poly_add by plonky2 doesn't do modular reduction yet
