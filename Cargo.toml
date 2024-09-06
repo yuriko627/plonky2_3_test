@@ -5,19 +5,19 @@ edition = "2021"
 
 [[bin]]
 name = "p2_fib"
-path = "src/p2_fib.rs"
+path = "src/bin/p2_fib.rs"
 
 [[bin]]
 name = "p2_poly_add"
-path = "src/p2_poly_add.rs"
+path = "src/bin/p2_poly_add.rs"
 
 [[bin]]
 name = "p3_fib"
-path = "src/p3_fib.rs"
+path = "src/bin/p3_fib.rs"
 
 [[bin]]
 name = "p3_poly_add"
-path = "src/p3_poly_add.rs"
+path = "src/bin/p3_poly_add.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -47,3 +47,5 @@ tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 anyhow = { version = "1.0.40", default-features = false }
 plonky2 = { git = "https://github.com/0xPolygonZero/plonky2.git" }
+num = { version = "0.4.0", default-features = false }
+

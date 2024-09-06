@@ -723,6 +723,7 @@ name = "plonky2_3_test"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "num",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
